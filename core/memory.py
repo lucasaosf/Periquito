@@ -110,6 +110,17 @@ class MemoryManager:
 
     def auto_learn(self, text: str, user_name: str) -> Optional[str]:
         """Detecta instruções de aprendizado automático no texto do Lucas."""
+        # Padrão para troca de nome preferido
+        name_match = re.search(r"(?:me\s+chame\s+(?:apenas\s+)?de|pode\s+me\s+chamar\s+(?:apenas\s+)?de|meu\s+nome\s+é)\s+([A-Za-zÀ-ÿ\s]+)", text, re.IGNORECASE)
+        if name_match:
+            new_name = name_match.group(1).strip()
+            # Limpa pontuações como 'bele', 'por favor'
+            new_name = re.sub(r"[,.!?].*$", "", new_name).strip()
+            new_name = re.sub(r"\b(bele|por\s+favor|ok|valeu)\b.*$", "", new_name, flags=re.IGNORECASE).strip()
+            if len(new_name) > 1:
+                self.save_fact("nome_preferido", new_name, category="usuario", source=user_name)
+                return f"Perfeito! A partir de agora vou te chamar de {new_name}."
+
         # Padrões comuns: "lembre-se que X é Y", "guarde na memória que...", "anote que..."
         patterns = [
             r"lembre(?:-se)?\s+que\s+(.+?)\s+(?:é|e|fica em|fica no|foi|será)\s+(.+)",

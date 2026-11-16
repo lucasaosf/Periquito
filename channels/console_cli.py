@@ -46,8 +46,8 @@ def run_console():
             result = brain.process_message(
                 text=user_input,
                 user_id="local_admin",
-                username="Lucas",
-                display_name="Macaco Opressor",
+                username="Lucas Aosf",
+                display_name="Lucas Aosf",
                 channel="console"
             )
 

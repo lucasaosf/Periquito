@@ -62,15 +62,21 @@ class PeriquitoBrain:
         """
         clean_text = text.strip()
         is_owner = self.security.is_owner(user_id=user_id, username=username, display_name=display_name)
-        effective_name = display_name or username or "Usuário"
+        
+        # Recupera nome preferido da memória se for o dono ou no console local
+        preferred_name = self.memory.get_fact("nome_preferido")
+        if is_owner or channel == "console":
+            effective_name = preferred_name or "Lucas Aosf"
+        else:
+            effective_name = display_name or username or "Visitante"
 
         # Registrar no histórico de conversas
         self.memory.log_message(channel, effective_name, "user", clean_text)
 
-        # 1. Checar se é uma instrução de aprendizado ("lembre-se que...", "anote que...")
+        # 1. Checar se é uma instrução de aprendizado ("lembre-se que...", "anote que...", "me chame de...")
         learned_msg = self.memory.auto_learn(clean_text, effective_name)
         if learned_msg:
-            resp = f"🦜 Entendido, {effective_name}! {learned_msg}"
+            resp = f"🦜 {learned_msg}"
             self.memory.log_message(channel, "Periquito", "assistant", resp)
             return {"text": resp, "audio_file": None, "file": None}
 
@@ -146,12 +152,20 @@ class PeriquitoBrain:
         if llm_response:
             resp = f"🦜 {llm_response}"
         else:
-            # Fallback inteligente quando nenhum modelo pesado de LLM está em execução
-            resp = (
-                f"🦜 Fala, {effective_name}! Estou ativo e monitorando o computador. "
-                f"Você pode me pedir para verificar o status do PC, abrir programas (QGIS, RStudio, Steam, Chrome), "
-                f"tirar print da tela, consultar projetos ou guardar coisas na memória permanente!"
-            )
+            # Respostas naturais para saudações e conversa quando a LLM local ainda não está conectada
+            if any(w in lower for w in ["tudo na paz", "tudo bem", "como vai", "como você tá", "como voce ta", "beleza"]):
+                resp = f"🦜 Tudo 100% na paz por aqui, {effective_name}! Monitorando o computador e pronto pras ordens. O que vamos fazer agora?"
+            elif any(w in lower for w in ["tá na escuta", "ta na escuta", "na escuta", "tá aí", "ta ai"]):
+                resp = f"🦜 Na escuta total, {effective_name}! Alto e claro."
+            elif any(w in lower for w in ["salve", "fala periquito", "e aí", "e ai", "olá", "ola", "bom dia", "boa tarde", "boa noite"]):
+                resp = f"🦜 Salve, {effective_name}! Tudo certo por aqui. Pode mandar o comando que eu executo."
+            elif any(w in lower for w in ["obrigado", "valeu", "show", "perfeito", "tks"]):
+                resp = f"🦜 Tamo junto, {effective_name}! Qualquer coisa é só chamar."
+            else:
+                resp = (
+                    f"🦜 Fala, {effective_name}! Tô na escuta. Você pode me pedir para ver o status do PC, "
+                    f"abrir programas (QGIS, RStudio, Steam, Chrome), tirar print da tela ou guardar coisas na memória permanente!"
+                )
 
         self.memory.log_message(channel, "Periquito", "assistant", resp)
         return {"text": resp, "audio_file": None, "file": None}
