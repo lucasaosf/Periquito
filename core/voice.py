@@ -33,3 +33,12 @@ class VoiceEngine:
     def generate_audio_sync(self, text: str, output_file: Optional[str] = None) -> str:
         """Versão síncrona para chamadas diretas."""
         return asyncio.run(self.speak_to_file(text, output_file))
+
+    def play_audio(self, audio_path: str) -> None:
+        """Reproduz o áudio nos alto-falantes ou fone do computador sem travar."""
+        if os.path.exists(audio_path):
+            import subprocess
+            subprocess.Popen(
+                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", audio_path],
+                shell=True
+            )
