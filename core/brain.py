@@ -166,9 +166,12 @@ class PeriquitoBrain:
 
         is_owner = self.security.is_owner(user_id=user_id, username=username, display_name=display_name)
         
-        # O dono no Discord é o Play (Pedrinho)
+        # O proprietário do computador e da IA é o Lucas
         if is_owner:
-            effective_name = "Play"
+            if display_name and any(p in display_name.lower() for p in ["pedrinho", "play"]):
+                effective_name = "Pedrinho"
+            else:
+                effective_name = "Lucas"
         else:
             effective_name = display_name or username or "Amigo"
 
@@ -190,7 +193,7 @@ class PeriquitoBrain:
             resp = (
                 f"Olá {effective_name}! Eu sou o Periquito. Posso conversar com você normalmente na call ou no chat, "
                 f"mas só tenho permissão para executar comandos, abrir programas ou mexer no computador "
-                f"quando o Play (Pedrinho) autorizar!"
+                f"quando o Lucas autorizar!"
             )
             self.memory.log_message(channel, "Periquito", "assistant", resp)
             return {"text": resp, "audio_file": None, "file": None}
@@ -264,12 +267,12 @@ class PeriquitoBrain:
 
         # 4. Raciocínio Geral via Multi-Engine LLM
         system_prompt = (
-            "Você é o Periquito, assistente de IA pessoal do servidor do Discord e do computador do Play (Pedrinho). "
-            "Você é gente boa, bem-humorado, perspicaz, divertido e leal ao Play. "
-            "O Play (pedrinho macaco) é o seu único chefe com permissão para dar ordens de sistema. "
-            "Trate o Play com amizade e respeito. Trate os amigos dele na chamada com simpatia e bom humor. "
+            "Você é o Periquito, assistente de IA pessoal do Lucas. "
+            "Você é gente boa, bem-humorado, perspicaz, divertido e leal ao Lucas. "
+            "O Lucas é o seu único chefe e criador, com permissão total sobre o computador. "
+            "Trate o Lucas com amizade e respeito. Trate os amigos dele na chamada com simpatia e bom humor. "
             "REGRA ABSOLUTA 1: NUNCA fale sobre placa de vídeo, peças de computador, hardware, Windows ou especificações técnicas a menos que perguntem especificamente sobre isso! "
-            "REGRA ABSOLUTA 2: SIGILO TOTAL DE VIDA PESSOAL. NUNCA cite, mencione, insinue ou faça comentários sobre relacionamentos amorosos, namoro, pessoas próximas, vida íntima ou qualquer segredo pessoal do Play. Esses assuntos são estritamente confidenciais e proibidos de serem falados em qualquer canal ou chamada. "
+            "REGRA ABSOLUTA 2: SIGILO TOTAL DE VIDA PESSOAL. NUNCA cite, mencione, insinue ou faça comentários sobre relacionamentos amorosos, namoro, pessoas próximas, vida íntima ou qualquer segredo pessoal do Lucas. Esses assuntos são estritamente confidenciais e proibidos de serem falados em qualquer canal ou chamada. "
             "Fale de forma 100% natural, dinâmica e direta (1 a 3 frases em conversas normais), como alguém conversando por voz com amigos. "
             "NÃO use listas de tópicos, bullets, asteriscos ou formatações visuais em bate-papo casual. "
             "Responda sempre em Português do Brasil com carisma e naturalidade."
