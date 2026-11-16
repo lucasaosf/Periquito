@@ -188,12 +188,19 @@ class TelegramBotClient:
     def run(self):
         """Inicia o bot do Telegram com requisições resilientes."""
         if not self.token or self.token == "seu_token_do_telegram_aqui":
-            print("Aviso: Token do Telegram não configurado no arquivo config/.env")
+            print("Aviso: Token do Telegram não configurado no arquivo config/.env", flush=True)
             return
 
-        print("==================================================")
-        print("🦜 INICIANDO BOT DO TELEGRAM DO PERIQUITO...")
-        print("==================================================")
+        print("==================================================", flush=True)
+        print("🦜 INICIANDO BOT DO TELEGRAM DO PERIQUITO...", flush=True)
+        print("==================================================", flush=True)
+
+        async def post_init(application):
+            bot_info = await application.bot.get_me()
+            print("==================================================", flush=True)
+            print(f"🦜 PERIQUITO TELEGRAM BOT ONLINE E OPERACIONAL!", flush=True)
+            print(f"Nome: {bot_info.first_name} | Username: @{bot_info.username} (ID: {bot_info.id})", flush=True)
+            print("==================================================", flush=True)
 
         # Configura cliente HTTPX com timeouts adequados
         req = HTTPXRequest(
@@ -204,7 +211,7 @@ class TelegramBotClient:
             pool_timeout=30.0
         )
 
-        app = ApplicationBuilder().token(self.token).request(req).build()
+        app = ApplicationBuilder().token(self.token).request(req).post_init(post_init).build()
         app.add_handler(CommandHandler("start", self._start_command))
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self._handle_message))
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
