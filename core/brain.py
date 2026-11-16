@@ -166,11 +166,11 @@ class PeriquitoBrain:
 
         is_owner = self.security.is_owner(user_id=user_id, username=username, display_name=display_name)
         
-        preferred_name = self.memory.get_fact("nome_preferido")
-        if is_owner or channel == "console":
-            effective_name = preferred_name or "Lucas Aosf"
+        # O dono no Discord é o Play (Pedrinho)
+        if is_owner:
+            effective_name = "Play"
         else:
-            effective_name = display_name or username or "Visitante"
+            effective_name = display_name or username or "Amigo"
 
         self.memory.log_message(channel, effective_name, "user", clean_text)
         lower = clean_text.lower()
@@ -182,15 +182,15 @@ class PeriquitoBrain:
             self.memory.log_message(channel, "Periquito", "assistant", resp)
             return {"text": resp, "audio_file": None, "file": None}
 
-        # 2. Segurança: Ações de Sistema Privilegiadas
+        # 2. Segurança: Ações de Sistema Privilegiadas (Apenas o Play / Pedrinho pode)
         is_privileged_request = any(
             kw in lower for kw in self.security.restricted_keywords
         )
         if is_privileged_request and not is_owner:
             resp = (
-                f"Olá {effective_name}! Eu sou o Periquito. Posso conversar com você normalmente, "
-                f"mas só tenho permissão para executar comandos, abrir programas ou acessar o computador "
-                f"quando o Lucas Aosf autorizar!"
+                f"Olá {effective_name}! Eu sou o Periquito. Posso conversar com você normalmente na call ou no chat, "
+                f"mas só tenho permissão para executar comandos, abrir programas ou mexer no computador "
+                f"quando o Play (Pedrinho) autorizar!"
             )
             self.memory.log_message(channel, "Periquito", "assistant", resp)
             return {"text": resp, "audio_file": None, "file": None}
@@ -263,17 +263,14 @@ class PeriquitoBrain:
                 return {"text": resp, "audio_file": None, "file": None}
 
         # 4. Raciocínio Geral via Multi-Engine LLM
-        memory_context = self.memory.get_context_summary()
         system_prompt = (
-            "Você é o Periquito, assistente de IA pessoal nativo que opera no computador do Lucas Aosf. "
-            "Você é ágil, altamente inteligente, leal ao Lucas Aosf, bem-humorado, prestativo e simpático. "
-            "Seu cérebro opera com um Trio de Motores de IA integrado: "
-            "1) Groq LPU na nuvem para velocidade supersônica (~1s); "
-            "2) Google Gemini para raciocínio analítico profundo; "
-            "3) Ollama local rodando na placa de vídeo GTX 1070 do Lucas para backup 100% offline. "
-            "Você possui ferramentas integradas: busca na web em tempo real (DuckDuckGo), status de hardware, calculadora segura AST, controle de programas e captura de tela. "
-            "Responda sempre em Português do Brasil com clareza, perspicácia e naturalidade. "
-            f"{memory_context}"
+            "Você é o Periquito, assistente de IA pessoal do servidor do Discord e do computador do Play (Pedrinho). "
+            "Você é gente boa, bem-humorado, perspicaz, divertido e leal ao Play. "
+            "O Play (pedrinho macaco) é o seu único chefe com permissão para dar ordens de sistema. "
+            "Trate o Play com amizade e respeito. Trate os amigos dele na chamada com simpatia e bom humor. "
+            "REGRA ABSOLUTA: NUNCA fale sobre placa de vídeo, peças de computador, hardware, Windows ou especificações técnicas a menos que perguntem especificamente sobre isso! "
+            "Fale de forma natural, dinâmica e direta (1 a 3 frases em conversas normais). "
+            "Responda sempre em Português do Brasil com carisma."
         )
 
         multi_res = self._query_multi_engine(clean_text, system_prompt)
