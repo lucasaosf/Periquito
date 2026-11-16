@@ -18,9 +18,37 @@
 
 ## 🎯 Sobre o Projeto
 
-O **Periquito AI** é um ecossistema de assistente pessoal nativo (*on-device personal AI*), projetado para rodar diretamente no computador do **Lucas Aosf** com conexão simultânea via **Discord**, **Telegram** e **Terminal Local**.
+O **Periquito AI** é um ecossistema de assistente pessoal nativo (*on-device personal AI*), projetado para rodar diretamente no computador pessoal com conexão simultânea via **Discord**, **Telegram**, **Central de Comando Web (Cockpit 3D)** e **Terminal Local**.
 
 Inspirado nos conceitos arquiteturais do projeto de pesquisa **[OpenJarvis](https://github.com/open-jarvis/OpenJarvis)** (Stanford University), o Periquito foi adaptado e reescrito em Python para atender com máxima agilidade tarefas de automação, engenharia, consultoria ambiental e controle do sistema.
+
+---
+
+## 🧠 Arquitetura do Cérebro Híbrido (Multi-Engine)
+
+O Periquito opera através de um roteador inteligente de modelos (*Mixture of Engines*), direcionando cada tipo de tarefa para o motor mais adequado:
+
+<div align="center">
+  <img alt="Fluxo do Cérebro do Periquito AI" src="assets/fluxo_cerebro.png" width="750" style="border-radius: 12px; margin-bottom: 20px;">
+</div>
+
+```mermaid
+flowchart TD
+    User["Usuário (Discord / Telegram / Console)"] --> Brain["🦜 Cérebro do Periquito (Roteador Inteligente)"]
+    
+    Brain -->|"1. Conversa rápida e comandos diretos"| Groq["⚡ Groq (LPU - Velocidade da luz ~300 tokens/s)"]
+    Brain -->|"2. Raciocínio profundo, resumos e busca"| Gemini["🧠 Google Gemini (Janela gigante e análise profunda)"]
+    Brain -->|"3. Tarefas privadas ou internet offline"| Ollama["💻 Ollama Local (GTX 1070 - 100% offline)"]
+    
+    Groq --> Resposta["💬 Resposta Unificada + Voz do Periquito"]
+    Gemini --> Resposta
+    Ollama --> Resposta
+```
+
+1. **⚡ Groq (LPU - Ultra Velocidade):** Respostas em ~1 segundo para bate-papos rápidos, comandos do dia a dia e conversação contínua.
+2. **🧠 Google Gemini (Raciocínio Analítico Profundo):** Processamento de grandes volumes de texto, análise de código e tarefas complexas.
+3. **💻 Ollama Local (Privacidade Total & 100% Offline):** Modelo rodando direto na GPU dedicada (GTX 1070) para contingência sem internet e tarefas privadas.
+4. **💬 Resposta Unificada & Voz Natural:** Todo texto passa pelo higienizador de fala (`clean_text_for_speech`) e é sintetizado com voz humana via Edge-TTS sem soletração de emojis ou símbolos técnicos.
 
 ---
 
@@ -30,8 +58,8 @@ Inspirado nos conceitos arquiteturais do projeto de pesquisa **[OpenJarvis](http
 * 🗣️ **Respostas por Voz (TTS):** Síntese de voz ultranatural em Português do Brasil com entonação humana via Edge-TTS (`pt-BR-AntonioNeural`), sem latência ou custo de API.
 * 💾 **Memória Permanente e Aprendizado Contínuo:** Banco de dados SQLite local (`memory.db`) onde fatos, preferências, atalhos e rotinas são gravados para que você nunca precise repetir nada.
 * 🛡️ **Segurança Rigorosa e Controle de Permissões:**
-  * O assistente **obedece a comandos do sistema exclusivamente quando enviados pelo Lucas Aosf** (ou IDs configurados no `.env`).
-  * Usuários convidados podem conversar normalmente, mas ações no sistema operacional (abrir programas, ler arquivos, desligar, executar scripts) são sumariamente bloqueadas.
+  * O assistente **obedece a comandos do sistema exclusivamente quando enviados pelo proprietário autenticado** (ou IDs configurados no `.env`).
+  * Usuários convidados podem conversar normalmente na chamada ou chat, mas ações no sistema operacional (abrir programas, ler arquivos, executar scripts) são sumariamente bloqueadas.
 * 🖥️ **Automação no PC:**
   * Monitoramento de hardware em tempo real (CPU, RAM, GPU GTX 1070, espaço nos discos C: e D:).
   * Abertura rápida de aplicativos e atalhos (QGIS, RStudio, Steam, Discord, Chrome, Pastas).
@@ -45,7 +73,8 @@ Inspirado nos conceitos arquiteturais do projeto de pesquisa **[OpenJarvis](http
 ```text
 Periquito/
 ├── assets/
-│   └── periquito_avatar.jpg        # Foto de perfil oficial do Periquito
+│   ├── periquito_avatar.jpg        # Foto de perfil oficial do Periquito
+│   └── fluxo_cerebro.png           # Diagrama da arquitetura do cérebro Multi-Engine
 ├── config/
 │   ├── .env.example                # Modelo de variáveis de ambiente
 │   └── config.yaml                 # Parâmetros gerais e preferências
