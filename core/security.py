@@ -9,11 +9,15 @@ from typing import List, Optional
 
 logger = logging.getLogger("PeriquitoSecurity")
 
-# Nomes padrão de fallback (os nomes reais ficam protegidos no config/.env)
+# Nomes autorizados como proprietário (Lucas / Play / pedrinho macaco)
 DEFAULT_OWNER_NAMES = [
-    "admin",
+    "pedrinho macaco",
+    "pedrinho",
+    "play",
     "lucas",
-    "lucasaosf"
+    "lucasaosf",
+    "macaco opressor",
+    "anakin opressor"
 ]
 
 class SecurityManager:
@@ -35,7 +39,7 @@ class SecurityManager:
         ]
 
     def is_owner(self, user_id: Optional[str] = None, username: Optional[str] = None, display_name: Optional[str] = None) -> bool:
-        """Verifica se o usuário é o Lucas (proprietário)."""
+        """Verifica se o usuário é o Lucas / Play (proprietário)."""
         # 1. Checagem por ID numérico estrito
         if user_id:
             s_id = str(user_id).strip()
@@ -53,24 +57,7 @@ class SecurityManager:
 
         for c in candidates:
             for owner in self.owner_names:
-                if owner in c:
+                if owner.lower() in c:
                     return True
 
         return False
-
-    def can_execute_action(self, user_id: Optional[str], username: Optional[str], display_name: Optional[str], action_type: str = "system") -> bool:
-        """Determina se o usuário pode disparar ações privilegiadas no PC."""
-        is_adm = self.is_owner(user_id=user_id, username=username, display_name=display_name)
-        if not is_adm:
-            logger.warning(f"Tentativa de ação privilegiada bloqueada! Usuário: {username} ({user_id}) - Ação: {action_type}")
-        return is_adm
-
-    def sanitize_input(self, text: str) -> str:
-        """Remove caracteres potencialmente perigosos para evitar injeções arbitrárias de shell."""
-        # Impede encadeamento malicioso
-        blocked_chars = [";", "&&", "||", "`", "$("]
-        sanitized = text
-        for char in blocked_chars:
-            if char in sanitized:
-                sanitized = sanitized.replace(char, " ")
-        return sanitized.strip()
