@@ -1,6 +1,6 @@
 """
 Cérebro Unificado do Periquito AI (Multi-Engine & OpenJarvis Tools)
-Orquestra o raciocínio híbrido (Gemini + Groq + Ollama), memória persistente, segurança e execução de ferramentas.
+Orquestra o raciocínio híbrido (Gemini SDK oficial + Groq + Ollama), memória persistente, segurança e execução de ferramentas.
 """
 
 import os
@@ -9,6 +9,12 @@ import json
 import logging
 import requests
 from typing import Dict, Any, Optional, Tuple
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente do .env
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_PATH = os.path.join(BASE_DIR, "config", ".env")
+load_dotenv(ENV_PATH)
 
 from core.security import SecurityManager
 from core.memory import MemoryManager
@@ -20,6 +26,7 @@ logger = logging.getLogger("PeriquitoBrain")
 
 class PeriquitoBrain:
     def __init__(self):
+        load_dotenv(ENV_PATH, override=True)
         self.security = SecurityManager()
         self.memory = MemoryManager()
         self.tools = SystemTools()
@@ -27,40 +34,49 @@ class PeriquitoBrain:
 
         # Configurações de Motores de IA Multi-Engine
         self.gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
         self.groq_key = os.getenv("GROQ_API_KEY", "").strip()
         self.ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip()
         self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
 
+        # Inicializa cliente Gemini oficial se chave disponível
+        self._gemini_client = None
+        if self.gemini_key:
+            try:
+                from google import genai
+                self._gemini_client = genai.Client(api_key=self.gemini_key)
+            except Exception as e:
+                logger.warning(f"Não foi possível inicializar genai.Client: {e}")
+
     def _query_gemini(self, prompt: str, system_prompt: str) -> Optional[str]:
-        """Consulta a API do Google Gemini 2.0 Flash."""
-        if not self.gemini_key:
+        """Consulta o Google Gemini usando o SDK oficial em alta velocidade."""
+        if not self._gemini_client:
             return None
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_key}"
-            payload = {
-                "contents": [
-                    {"role": "user", "parts": [{"text": prompt}]}
-                ],
-                "systemInstruction": {
-                    "parts": [{"text": system_prompt}]
-                },
-                "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": 1000
-                }
-            }
-            res = requests.post(url, json=payload, timeout=15)
-            if res.status_code == 200:
-                data = res.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "").strip()
-            else:
-                logger.warning(f"Gemini API returned status {res.status_code}: {res.text}")
-        except Exception as e:
-            logger.warning(f"Erro ao consultar Gemini: {e}")
+        from google.genai import types
+
+        # Tenta o modelo ultra-rápido (gemini-3.1-flash-lite) ou o configurado
+        models_to_try = [self.gemini_model, "gemini-3.5-flash", "gemini-3.8-flash"]
+        # Remove duplicatas preservando ordem
+        seen = set()
+        models_ordered = [m for m in models_to_try if not (m in seen or seen.add(m))]
+
+        for model_name in models_ordered:
+            try:
+                config = types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.7,
+                    max_output_tokens=700,
+                )
+                response = self._gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=config
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                logger.warning(f"Tentativa com Gemini ({model_name}) falhou: {e}")
+                continue
         return None
 
     def _query_groq(self, prompt: str, system_prompt: str) -> Optional[str]:
@@ -80,16 +96,14 @@ class PeriquitoBrain:
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.7,
-                "max_tokens": 1000
+                "max_tokens": 700
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=12)
+            res = requests.post(url, headers=headers, json=payload, timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 choices = data.get("choices", [])
                 if choices:
                     return choices[0].get("message", {}).get("content", "").strip()
-            else:
-                logger.warning(f"Groq API returned status {res.status_code}: {res.text}")
         except Exception as e:
             logger.warning(f"Erro ao consultar Groq: {e}")
         return None
@@ -116,24 +130,20 @@ class PeriquitoBrain:
     def _query_multi_engine(self, prompt: str, system_prompt: str) -> Optional[Tuple[str, str]]:
         """
         Orquestrador de IA Híbrida / Roteamento Multi-Engine:
-        1. Tenta Groq (ultra-rápido, ~200ms) se disponível
-        2. Tenta Gemini (profundidade analítica superior) se disponível
+        1. Se Groq disponível, testa primeiro para resposta instantânea
+        2. Tenta Gemini (Google Gemini com raciocínio apurado)
         3. Tenta Ollama (backup local offline)
-        Retorna (texto_resposta, nome_do_motor)
         """
-        # Se Groq configurado, testa velocidade primeiro
         if self.groq_key:
             ans = self._query_groq(prompt, system_prompt)
             if ans:
                 return ans, "Groq (Llama 3.3)"
 
-        # Se Gemini configurado, consulta
-        if self.gemini_key:
+        if self._gemini_client:
             ans = self._query_gemini(prompt, system_prompt)
             if ans:
-                return ans, "Google Gemini 2.0"
+                return ans, "Google Gemini"
 
-        # Fallback local Ollama
         ans = self._query_ollama(prompt, system_prompt)
         if ans:
             return ans, "Ollama Local"
@@ -155,7 +165,6 @@ class PeriquitoBrain:
 
         is_owner = self.security.is_owner(user_id=user_id, username=username, display_name=display_name)
         
-        # Recupera nome preferido
         preferred_name = self.memory.get_fact("nome_preferido")
         if is_owner or channel == "console":
             effective_name = preferred_name or "Lucas Aosf"
@@ -256,7 +265,7 @@ class PeriquitoBrain:
         memory_context = self.memory.get_context_summary()
         system_prompt = (
             "Você é o Periquito, assistente de IA pessoal nativo que opera no computador do Lucas Aosf. "
-            "Você é ágil, altamente inteligente, leal ao Lucas Aosf, bem-humorado e prestativo. "
+            "Você é ágil, altamente inteligente, leal ao Lucas Aosf, bem-humorado, prestativo e simpático. "
             "Você tem ferramentas integradas (busca na web, status do hardware, calculadora segura, controle de apps). "
             "Responda sempre em Português do Brasil com clareza e naturalidade. "
             f"{memory_context}"
@@ -267,24 +276,8 @@ class PeriquitoBrain:
             llm_text, engine_name = multi_res
             resp = f"🦜 {llm_text}"
         else:
-            # Fallback amigável caso nenhuma chave de IA tenha sido inserida ainda
-            if any(w in lower for w in ["tudo na paz", "tudo bem", "como vai", "como você tá", "como voce ta", "beleza"]):
-                resp = f"🦜 Tudo 100% na paz por aqui, {effective_name}! Monitorando o computador e pronto pras ordens."
-            elif any(w in lower for w in ["tá na escuta", "ta na escuta", "na escuta", "tá aí", "ta ai"]):
-                resp = f"🦜 Na escuta total, {effective_name}! Alto e claro."
-            elif any(w in lower for w in ["salve", "fala periquito", "e aí", "e ai", "olá", "ola", "bom dia", "boa tarde", "boa noite"]):
-                resp = f"🦜 Salve, {effective_name}! Tudo certo por aqui. Pode mandar o comando que eu executo."
-            elif any(w in lower for w in ["obrigado", "valeu", "show", "perfeito", "tks"]):
-                resp = f"🦜 Tamo junto, {effective_name}! Qualquer coisa é só chamar."
-            else:
-                resp = (
-                    f"🦜 Fala, {effective_name}! Estou ativo e as ferramentas já estão funcionando:\n"
-                    f"• `pesquisa <termo>` para buscar na web\n"
-                    f"• `calcula <expressao>` para matemática\n"
-                    f"• `clima <cidade>` para previsão do tempo\n"
-                    f"• `status` para ver CPU, RAM e GTX 1070\n"
-                    f"Para eu bater papo livre e raciocinar sobre qualquer assunto, basta adicionar sua chave de IA no arquivo .env!"
-                )
+            # Fallback seguro caso os motores estejam indisponíveis
+            resp = f"🦜 Fala, {effective_name}! Estou aqui com você. Como posso te ajudar agora?"
 
         self.memory.log_message(channel, "Periquito", "assistant", resp)
         return {"text": resp, "audio_file": None, "file": None}
