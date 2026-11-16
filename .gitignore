@@ -33,6 +33,11 @@ venv/
 env/
 ENV/
 
+# Executáveis locais e atalhos
+*.exe
+*.lnk
+Periquito.exe
+
 # Sistema Operacional
 Thumbs.db
 ehthumbs.db

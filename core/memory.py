@@ -51,14 +51,13 @@ class MemoryManager:
         self._seed_initial_knowledge()
 
     def _seed_initial_knowledge(self):
-        """Fatos pré-definidos essenciais sobre o ambiente do Lucas."""
+        """Fatos fundamentais configuráveis sobre o ambiente (dados privados ficam apenas no banco local memory.db)."""
+        owner = os.getenv("OWNER_NAME", "Lucas Aosf")
+        projects = os.getenv("PROJECTS_ROOT", ".")
         initial_facts = [
-            ("proprietario_nome", "Lucas Aosf (no Discord: Macaco Opressor ou anakin opressor)", "usuario"),
+            ("proprietario_nome", owner, "usuario"),
             ("identidade", "Periquito - Assistente Pessoal Nativo de IA, rápido, inteligente e bem-humorado", "identidade"),
-            ("diretorio_projetos", r"C:\Users\Lucas Aosf\Documents\!!!___ANTIGRAVITY___!!!", "sistema"),
-            ("pasta_qgis_automacao", r"C:\Users\Lucas Aosf\Documents\!!!___ANTIGRAVITY___!!!\QGIS_Automation", "sistema"),
-            ("micheli", "Namorada/parceira do Lucas, usa o Claude Pro no PC", "pessoas"),
-            ("especialidade", "Consultoria Ambiental, Engenharia Florestal, Cartografia, QGIS e RStudio", "trabalho"),
+            ("diretorio_projetos", projects, "sistema"),
             ("placa_video", "NVIDIA GeForce GTX 1070 (8GB VRAM)", "hardware"),
             ("sistema_operacional", "Windows 11 (64-bit)", "sistema")
         ]

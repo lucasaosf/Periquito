@@ -9,10 +9,9 @@ from typing import List, Optional
 
 logger = logging.getLogger("PeriquitoSecurity")
 
-# Nomes de usuário do proprietário (Lucas) no Discord / Telegram
+# Nomes padrão de fallback (os nomes reais ficam protegidos no config/.env)
 DEFAULT_OWNER_NAMES = [
-    "macaco opressor",
-    "anakin opressor",
+    "admin",
     "lucas",
     "lucasaosf"
 ]

@@ -30,7 +30,7 @@ Inspirado nos conceitos arquiteturais do projeto de pesquisa **[OpenJarvis](http
 * 🗣️ **Respostas por Voz (TTS):** Síntese de voz ultranatural em Português do Brasil com entonação humana via Edge-TTS (`pt-BR-AntonioNeural`), sem latência ou custo de API.
 * 💾 **Memória Permanente e Aprendizado Contínuo:** Banco de dados SQLite local (`memory.db`) onde fatos, preferências, atalhos e rotinas são gravados para que você nunca precise repetir nada.
 * 🛡️ **Segurança Rigorosa e Controle de Permissões:**
-  * O assistente **obedece a comandos do sistema exclusivamente quando enviados pelo Lucas** (`Macaco Opressor` / `anakin opressor`).
+  * O assistente **obedece a comandos do sistema exclusivamente quando enviados pelo Lucas Aosf** (ou IDs configurados no `.env`).
   * Usuários convidados podem conversar normalmente, mas ações no sistema operacional (abrir programas, ler arquivos, desligar, executar scripts) são sumariamente bloqueadas.
 * 🖥️ **Automação no PC:**
   * Monitoramento de hardware em tempo real (CPU, RAM, GPU GTX 1070, espaço nos discos C: e D:).
