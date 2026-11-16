@@ -1,20 +1,112 @@
 """
 Módulo de Ferramentas e Execução no Sistema do Periquito AI
-Fornece capacidades de automação no Windows com checagens de segurança.
+Adaptado e enriquecido com módulos de alta performance do OpenJarvis (Stanford SAIL / Hazy Research).
+Fornece capacidades de automação no Windows, busca na web, matemática segura e checagens de integridade.
 """
 
 import os
 import sys
+import ast
+import math
 import psutil
 import shutil
+import operator
 import datetime
+import requests
 import subprocess
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 PROJECTS_DIR = r"C:\Users\Lucas Aosf\Documents\!!!___ANTIGRAVITY___!!!"
 QGIS_AUTOMATION_DIR = os.path.join(PROJECTS_DIR, "QGIS_Automation")
 
-# Mapeamento de aplicativos para inicialização rápida
+# ==============================================================================
+# 1. CALCULADORA MATEMÁTICA SEGURA (Portada do OpenJarvis)
+# ==============================================================================
+_BINOPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+
+_UNARYOPS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+_MATH_FUNCS = {
+    "abs": abs,
+    "round": round,
+    "min": min,
+    "max": max,
+    "sqrt": math.sqrt,
+    "log": math.log,
+    "ln": math.log,
+    "log10": math.log10,
+    "log2": math.log2,
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "pi": math.pi,
+    "e": math.e,
+    "ceil": math.ceil,
+    "floor": math.floor,
+}
+
+def _safe_eval_node(node: ast.AST) -> Any:
+    if isinstance(node, ast.Expression):
+        return _safe_eval_node(node.body)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float, complex)):
+            return node.value
+        raise ValueError(f"Tipo não suportado: {type(node.value).__name__}")
+    if isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type not in _BINOPS:
+            raise ValueError(f"Operador binário não suportado: {op_type.__name__}")
+        return _BINOPS[op_type](_safe_eval_node(node.left), _safe_eval_node(node.right))
+    if isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type not in _UNARYOPS:
+            raise ValueError(f"Operador unário não suportado: {op_type.__name__}")
+        return _UNARYOPS[op_type](_safe_eval_node(node.operand))
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise ValueError("Apenas chamadas simples de função são permitidas")
+        fname = node.func.id
+        if fname not in _MATH_FUNCS:
+            raise ValueError(f"Função matemática desconhecida: {fname}")
+        args = [_safe_eval_node(a) for a in node.args]
+        return _MATH_FUNCS[fname](*args)
+    if isinstance(node, ast.Name):
+        name = node.id
+        if name in _MATH_FUNCS:
+            val = _MATH_FUNCS[name]
+            if isinstance(val, (int, float)):
+                return val
+        raise ValueError(f"Variável desconhecida: {name}")
+    raise ValueError(f"Expressão inválida: {type(node).__name__}")
+
+
+def safe_math_eval(expression: str) -> str:
+    """Calcula expressões matemáticas com total segurança contra injeção de código."""
+    clean_expr = expression.replace("^", "**").replace("x", "*").replace("X", "*")
+    try:
+        tree = ast.parse(clean_expr, mode="eval")
+        res = _safe_eval_node(tree.body)
+        return f"{res}"
+    except ZeroDivisionError:
+        return "Erro: divisão por zero."
+    except Exception as e:
+        return f"Erro de cálculo: {e}"
+
+
+# ==============================================================================
+# 2. MAPEAMENTO DE APLICATIVOS
+# ==============================================================================
 APPS_MAP = {
     "qgis": r"D:\QGIS\bin\qgis-ltr.bat",
     "rstudio": r"C:\Program Files\RStudio\rstudio.exe",
@@ -25,6 +117,7 @@ APPS_MAP = {
     "explorer": "explorer.exe",
     "projetos": f"explorer.exe \"{PROJECTS_DIR}\""
 }
+
 
 class SystemTools:
     @staticmethod
@@ -43,7 +136,6 @@ class SystemTools:
                     "percent_livre": round((usage.free / usage.total) * 100, 1)
                 }
 
-        # Informações da GPU
         gpu_info = "NVIDIA GeForce GTX 1070 (8 GB VRAM)"
         try:
             out = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
@@ -115,5 +207,38 @@ class SystemTools:
                 output_path = os.path.join(base_dir, "data", "audio_temp", f"print_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
             screenshot.save(output_path)
             return output_path
-        except Exception as e:
+        except Exception:
             return None
+
+    @staticmethod
+    def web_search(query: str, max_results: int = 4) -> str:
+        """Busca na web em tempo real usando DuckDuckGo (OpenJarvis engine)."""
+        try:
+            from ddgs import DDGS
+            ddgs = DDGS()
+            results = list(ddgs.text(query, max_results=max_results))
+            if not results:
+                return "Nenhum resultado encontrado para a busca."
+            
+            snippets = []
+            for r in results:
+                title = r.get("title", "Sem título")
+                url = r.get("href", "")
+                snippet = r.get("body", "")
+                snippets.append(f"• **{title}**\n  {snippet}\n  Fonte: {url}")
+            return "\n\n".join(snippets)
+        except Exception as e:
+            return f"Erro ao realizar pesquisa na web: {e}"
+
+    @staticmethod
+    def get_weather(location: str = "") -> str:
+        """Consulta previsão do tempo instantânea."""
+        try:
+            loc = location.strip().replace(" ", "+") if location.strip() else ""
+            url = f"https://wttr.in/{loc}?format=3"
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return r.text.strip()
+            return "Não foi possível obter dados meteorológicos no momento."
+        except Exception as e:
+            return f"Erro ao consultar clima: {e}"
