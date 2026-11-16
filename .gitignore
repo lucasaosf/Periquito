@@ -1,0 +1,45 @@
+# Arquivos de Segredo e Configurações Pessoais (CRÍTICO - NUNCA ENVIAR AO GITHUB)
+.env
+*.env
+config/.env
+*.token
+*.key
+*.pem
+secrets/
+
+# Banco de Dados de Memória e Aprendizado
+data/memory.db
+data/memory.db*
+*.db
+*.sqlite3
+
+# Arquivos temporários de áudio e logs
+data/audio_temp/*
+!data/audio_temp/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
+*.log
+*.wav
+*.mp3
+
+# Python Cache e Ambientes Virtuais
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# Sistema Operacional
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/

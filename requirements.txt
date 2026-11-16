@@ -1,0 +1,8 @@
+# Periquito AI - Dependências Principais
+discord.py>=2.4.0
+python-telegram-bot>=22.0
+edge-tts>=6.1.19
+python-dotenv>=1.2.0
+psutil>=6.0.0
+requests>=2.32.0
+pyyaml>=6.0.2

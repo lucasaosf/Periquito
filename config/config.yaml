@@ -1,0 +1,24 @@
+# ==============================================================================
+# PERIQUITO AI - ARQUIVO DE CONFIGURAÇÃO GERAL
+# ==============================================================================
+
+app:
+  name: "Periquito"
+  version: "1.0.0"
+  description: "Assistente de IA Pessoal Nativo Multicanal"
+  language: "pt-BR"
+
+voice:
+  default_voice: "pt-BR-AntonioNeural"
+  backup_voice: "pt-BR-FranciscaNeural"
+  rate: "+0%"
+  volume: "+0%"
+
+security:
+  allow_guest_chat: true
+  allow_guest_commands: false
+  log_audit: true
+
+memory:
+  auto_learn: true
+  history_limit: 50
