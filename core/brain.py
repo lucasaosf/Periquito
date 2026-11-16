@@ -36,6 +36,7 @@ class PeriquitoBrain:
         self.gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite").strip()
         self.groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        self.groq_model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
         self.ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip()
         self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
 
@@ -90,7 +91,7 @@ class PeriquitoBrain:
                 "Content-Type": "application/json"
             }
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": self.groq_model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
