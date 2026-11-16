@@ -18,6 +18,7 @@ from discord.ext import commands, voice_recv
 from typing import Optional, Dict
 
 from core.brain import PeriquitoBrain
+from core.voice import clean_text_for_speech
 
 logger = logging.getLogger("DiscordBot")
 
@@ -152,9 +153,8 @@ class PeriquitoVoiceSink(voice_recv.AudioSink):
                 self.is_processing = False
                 return
 
-            # Limpa formatação para fala
-            clean_speech = re.sub(r"[*#_`~•🦜]", "", text_resp).strip()
-            clean_speech = re.sub(r"https?://\S+", "", clean_speech).strip()
+            # Higieniza formatação e símbolos para fala natural
+            clean_speech = clean_text_for_speech(text_resp)
 
             # 4. Síntese de Voz e Transmissão Direta na Call
             if len(clean_speech) > 2 and self.voice_client and self.voice_client.is_connected():
@@ -270,7 +270,17 @@ class DiscordBotClient:
                 if author_in_voice:
                     vc = message.author.voice.channel
                     try:
-                        if not message.guild.voice_client:
+                        # Se houver um client desconectado ou com erro, limpa antes
+                        if message.guild.voice_client and not message.guild.voice_client.is_connected():
+                            try:
+                                if self.active_sink:
+                                    self.active_sink.cleanup()
+                                    self.active_sink = None
+                                await message.guild.voice_client.disconnect(force=True)
+                            except Exception:
+                                pass
+
+                        if not message.guild.voice_client or not message.guild.voice_client.is_connected():
                             voice_client = await vc.connect(cls=voice_recv.VoiceRecvClient, timeout=20.0, reconnect=True)
                             self.active_sink = PeriquitoVoiceSink(self.bot, self.brain, vc)
                             voice_client.listen(self.active_sink)
@@ -279,6 +289,11 @@ class DiscordBotClient:
                             if message.guild.voice_client.channel != vc:
                                 await message.guild.voice_client.move_to(vc)
                                 await message.reply(f"🦜 Mudei para a sala de voz **{vc.name}**!")
+                            elif hasattr(message.guild.voice_client, 'is_listening') and not message.guild.voice_client.is_listening():
+                                if not self.active_sink:
+                                    self.active_sink = PeriquitoVoiceSink(self.bot, self.brain, vc)
+                                message.guild.voice_client.listen(self.active_sink)
+                                await message.reply(f"🦜 Escuta ativa reativada na sala **{vc.name}**!")
                     except Exception as e:
                         print(f"Erro ao conectar na voz: {e}")
                 else:
@@ -302,8 +317,7 @@ class DiscordBotClient:
                 voice_client = message.guild.voice_client if message.guild else None
                 if voice_client and voice_client.is_connected():
                     try:
-                        clean_speech = re.sub(r"[*#_`~•🦜]", "", text_resp).strip()
-                        clean_speech = re.sub(r"https?://\S+", "", clean_speech).strip()
+                        clean_speech = clean_text_for_speech(text_resp)
                         if len(clean_speech) > 2:
                             audio_file = await self.brain.voice.speak_to_file(clean_speech[:350])
                             if os.path.exists(audio_file):

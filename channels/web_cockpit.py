@@ -22,6 +22,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from core.brain import PeriquitoBrain
+from core.voice import clean_text_for_speech
 from channels.discord_bot import DiscordBotClient
 
 logger = logging.getLogger("PeriquitoCockpit")
@@ -170,8 +171,7 @@ async def process_chat(request: Request):
     if voice_enabled and resp_text:
         try:
             # Limpa emojis e markdown para a síntese de voz fluida
-            import re
-            clean_speech = re.sub(r"[*#_`~•🦜]", "", resp_text).strip()
+            clean_speech = clean_text_for_speech(resp_text)
             if len(clean_speech) > 2:
                 audio_file = await brain.voice.speak_to_file(clean_speech[:600])
                 audio_url = f"/api/audio/{os.path.basename(audio_file)}"
