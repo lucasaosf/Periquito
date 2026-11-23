@@ -1,8 +1,49 @@
-# Periquito AI - Dependências Principais
+# =============================================================================
+# 🦜 PERIQUITO AI - DEPENDÊNCIAS OFICIAIS (100% CUSTO ZERO & OPEN-SOURCE)
+# =============================================================================
+
+# Comunicação e Gateways Omnichannel
+python-telegram-bot>=21.0
 discord.py>=2.4.0
-python-telegram-bot>=22.0
+fastapi>=0.110.0
+uvicorn>=0.30.0
+pydantic>=2.7.0
+
+# Protocolo MCP (Model Context Protocol)
+fastmcp>=0.4.0
+
+# Voz, Áudio e Atalhos do Windows
 edge-tts>=6.1.19
-python-dotenv>=1.2.0
+sounddevice>=0.5.0
+pynput>=1.7.6
+faster-whisper>=1.0.0
+numpy>=1.26.0
+
+# Ferramentas de Sistema, Hardware e Automação Windows
 psutil>=6.0.0
+pycaw>=20240210
+comtypes>=1.4.0
 requests>=2.32.0
 pyyaml>=6.0.2
+python-dotenv>=1.0.1
+
+# Pesquisa Web e Raspagem Anti-SSRF
+duckduckgo-search>=6.0.0
+trafilatura>=1.12.0
+
+# Processamento de Documentos e Mídias
+openpyxl>=3.1.0
+python-docx>=1.1.0
+reportlab>=4.2.0
+Pillow>=10.3.0
+pymupdf>=1.24.0
+pytesseract>=0.3.10
+rembg>=2.0.50
+
+# Memória Hierárquica e Criptografia
+cryptography>=42.0.0
+openviking>=0.5.0
+
+# Testes de Segurança
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

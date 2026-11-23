@@ -1,28 +1,46 @@
-# Arquivos de Segredo e Configurações Pessoais (CRÍTICO - NUNCA ENVIAR AO GITHUB)
+# Segredos e Configurações Pessoais (CRÍTICO)
 .env
 *.env
+.env.*
 config/.env
+*.credentials.yaml
+settings.yaml
 *.token
 *.key
 *.pem
+*.pfx
 secrets/
 
-# Banco de Dados de Memória e Aprendizado
-data/memory.db
-data/memory.db*
-*.db
-*.sqlite3
+# Workspace Dinâmico e Dados Privados do Agente
+workspace/
+!workspace/inbox/.gitkeep
+!workspace/outbox/.gitkeep
+!workspace/viking_data/.gitkeep
+!workspace/ipc/.gitkeep
 
-# Arquivos temporários de áudio e logs
+# Bancos de Dados e IPC WAL
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/memory.db*
+
+# Arquivos de Mídia e Temporários
+*.log
+*.wav
+*.mp3
+*.ogg
+*.m4a
+*.png
+*.jpg
+*.jpeg
 data/audio_temp/*
 !data/audio_temp/.gitkeep
 data/logs/*
 !data/logs/.gitkeep
-*.log
-*.wav
-*.mp3
 
-# Python Cache e Ambientes Virtuais
+# Python, Cache e Ambientes Virtuais
 __pycache__/
 */__pycache__/
 */*/__pycache__/
@@ -32,8 +50,11 @@ __pycache__/
 venv/
 env/
 ENV/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Executáveis locais e atalhos
+# Executáveis locais
 *.exe
 *.lnk
 Periquito.exe

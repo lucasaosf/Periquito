@@ -1,218 +1,251 @@
 """
-Conector do Bot do Telegram para o Periquito AI
-Suporta mensagens de texto, áudios/mensagens de voz com Groq Whisper,
-fotos/screenshots e interação inteligente tanto em chats privados quanto em grupos.
+Canal Oficial do Telegram do Periquito AI
+- Canal de Comando Administrativo Pessoal (Apenas TELEGRAM_ADMIN_ID)
+- Suporte a Texto, Áudio (Faster-Whisper) e Documentos (workspace/inbox/)
+- Worker Assíncrono para Botões Interativos HITL e Envio de Arquivos PC -> Celular
 """
 
 import os
-import io
-import re
 import asyncio
 import logging
-import requests
+from pathlib import Path
 from typing import Optional
-from telegram import Update
-from telegram.request import HTTPXRequest
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
+    Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
     filters
 )
 
-from core.brain import PeriquitoBrain
-from core.voice import clean_text_for_speech
+from config import config, INBOX_DIR
+from core.brain_bridge import PeriquitoBrain
+from core.ipc_store import (
+    get_pending_hitl,
+    resolve_hitl,
+    get_pending_outbox_files,
+    mark_outbox_file_sent,
+    get_pending_notifications,
+    mark_notification_delivered
+)
+from core.voice import transcribe_audio, synthesize_speech
+from core.text_utils import slice_message
 
-logger = logging.getLogger("TelegramBot")
+logger = logging.getLogger("TelegramChannel")
 
 
-class TelegramBotClient:
-    def __init__(self, brain: PeriquitoBrain, token: Optional[str] = None):
+def _is_admin(user_id: int) -> bool:
+    """Valida correspondência estrita com o ID numérico do administrador."""
+    return config.telegram.admin_id != 0 and user_id == config.telegram.admin_id
+
+
+class TelegramChannel:
+    def __init__(self, brain: PeriquitoBrain):
         self.brain = brain
-        self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
+        self.app: Optional[Application] = None
+        self._worker_task: Optional[asyncio.Task] = None
 
-    async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not update.message or not update.message.text:
+    async def start(self):
+        token = config.telegram.bot_token
+        if not token or config.telegram.admin_id == 0:
+            logger.warning("[Telegram] Token ou Admin ID não configurados no .env. Canal desativado.")
             return
 
-        chat = update.effective_chat
-        user = update.effective_user
-        raw_text = update.message.text.strip()
-        is_private = (chat.type == "private")
+        self.app = Application.builder().token(token).build()
 
-        bot_username = context.bot.username or "PeriquitoIAbot"
+        self.app.add_handler(CommandHandler("start", self._handle_start))
+        self.app.add_handler(CallbackQueryHandler(self._handle_callback))
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
+        self.app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, self._handle_voice))
+        self.app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, self._handle_file))
 
-        # Em grupos, só responde se for chamado pelo nome ou marcado
-        if not is_private:
-            is_reply_to_bot = (
-                update.message.reply_to_message and
-                update.message.reply_to_message.from_user and
-                update.message.reply_to_message.from_user.id == context.bot.id
-            )
-            is_mentioned = f"@{bot_username.lower()}" in raw_text.lower()
-            starts_name = raw_text.lower().startswith(("periquito", "robson", "!p ", "!periquito"))
+        await self.app.initialize()
+        await self.app.start()
+        await self.app.updater.start_polling()
 
-            if not (is_reply_to_bot or is_mentioned or starts_name):
-                return
+        self._worker_task = asyncio.create_task(self._ipc_worker_loop())
+        logger.info(f"🦜 [Telegram] Bot ativo no modo seguro (Admin ID: {config.telegram.admin_id})")
 
-        # Limpa menção do texto
-        cleaned_text = re.sub(rf"@{bot_username}\b", "", raw_text, flags=re.IGNORECASE).strip()
-        if cleaned_text.lower().startswith("periquito"):
-            cleaned_text = cleaned_text[9:].strip(" ,:")
-        elif cleaned_text.lower().startswith("robson"):
-            cleaned_text = cleaned_text[6:].strip(" ,:")
-        elif cleaned_text.lower().startswith("!p "):
-            cleaned_text = cleaned_text[3:].strip()
+    async def stop(self):
+        if self._worker_task:
+            self._worker_task.cancel()
+        if self.app:
+            await self.app.updater.stop()
+            await self.app.stop()
+            await self.app.shutdown()
 
-        if not cleaned_text:
-            cleaned_text = "e aí, periquito!"
+    async def _handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or not _is_admin(update.effective_user.id):
+            return  # Ignora silenciosamente não-administradores
+        await update.message.reply_text("🦜 Olá Lucas! O Periquito está pronto e conectado ao seu computador.")
 
-        # Envia indicador de digitação
-        await context.bot.send_chat_action(chat_id=chat.id, action="typing")
+    async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or not _is_admin(update.effective_user.id):
+            return
 
-        # Processa a mensagem pelo cérebro unificado
-        result = self.brain.process_message(
-            text=cleaned_text,
-            user_id=str(user.id),
-            username=user.username or "",
-            display_name=user.full_name or user.first_name,
-            channel="telegram"
-        )
+        user_text = update.message.text
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-        resp_text = result.get("text", "")
-        file_path = result.get("file")
+        response = await self.brain.ask(user_text, user_name="Lucas", channel="telegram")
 
-        # Se houver imagem (print da tela, mapa, etc.)
-        if file_path and os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                await update.message.reply_photo(photo=f, caption=resp_text[:1024])
-        else:
-            if len(resp_text) > 4000:
-                for i in range(0, len(resp_text), 4000):
-                    await update.message.reply_text(resp_text[i:i + 4000])
-            else:
-                await update.message.reply_text(resp_text)
+        for chunk in slice_message(response, max_length=4000):
+            await update.message.reply_text(chunk)
 
     async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Processa mensagens de voz recebidas no Telegram com transcrição via Whisper."""
-        if not update.message or not update.message.voice:
+        if not update.effective_user or not _is_admin(update.effective_user.id):
             return
 
-        chat = update.effective_chat
-        user = update.effective_user
-        is_private = (chat.type == "private")
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="record_voice")
 
-        # Em grupos, só responde a voz se for em resposta ao bot
-        if not is_private:
-            is_reply_to_bot = (
-                update.message.reply_to_message and
-                update.message.reply_to_message.from_user and
-                update.message.reply_to_message.from_user.id == context.bot.id
-            )
-            if not is_reply_to_bot:
-                return
+        # Baixa arquivo de áudio no inbox
+        voice_obj = update.message.voice or update.message.audio
+        file = await context.bot.get_file(voice_obj.file_id)
+        
+        INBOX_DIR.mkdir(parents=True, exist_ok=True)
+        local_audio_path = INBOX_DIR / f"voice_{update.message.message_id}.ogg"
+        await file.download_to_drive(str(local_audio_path))
 
-        await context.bot.send_chat_action(chat_id=chat.id, action="record_voice")
+        # Transcrição via Faster-Whisper
+        try:
+            transcription = await transcribe_audio(local_audio_path)
+        except Exception as e:
+            transcription = ""
+            logger.error(f"Erro na transcrição: {e}")
+
+        if not transcription:
+            await update.message.reply_text("⚠️ Não consegui compreender o áudio.")
+            return
+
+        await update.message.reply_text(f"🎤 *Você disse:* \"{transcription}\"", parse_mode="Markdown")
+
+        response = await self.brain.ask(transcription, user_name="Lucas", channel="telegram")
+
+        # Responde com texto e também sintetiza áudio de retorno
+        for chunk in slice_message(response, max_length=4000):
+            await update.message.reply_text(chunk)
 
         try:
-            # 1. Baixa o áudio da mensagem de voz
-            voice_file = await context.bot.get_file(update.message.voice.file_id)
-            voice_bytes = await voice_file.download_as_bytearray()
-
-            # 2. Transcrição Ultra-Rápida com Groq Whisper
-            groq_key = os.getenv("GROQ_API_KEY", "").strip()
-            transcript = ""
-            if groq_key:
-                try:
-                    res = requests.post(
-                        "https://api.groq.com/openai/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {groq_key}"},
-                        files={"file": ("voice.ogg", bytes(voice_bytes), "audio/ogg")},
-                        data={"model": "whisper-large-v3-turbo", "language": "pt"},
-                        timeout=10
-                    )
-                    if res.status_code == 200:
-                        transcript = res.json().get("text", "").strip()
-                except Exception as e:
-                    logger.warning(f"Erro Whisper Telegram: {e}")
-
-            if not transcript:
-                await update.message.reply_text("🦜 Não consegui entender o áudio com clareza. Pode repetir?")
-                return
-
-            # 3. Processamento no Cérebro do Periquito
-            result = self.brain.process_message(
-                text=transcript,
-                user_id=str(user.id),
-                username=user.username or "",
-                display_name=user.full_name or user.first_name,
-                channel="telegram_voice"
-            )
-
-            resp_text = result.get("text", "")
-            file_path = result.get("file")
-
-            # 4. Síntese de Resposta em Áudio
-            clean_speech = clean_text_for_speech(resp_text)
-            audio_path = None
-            if len(clean_speech) > 2:
-                audio_path = await self.brain.voice.speak_to_file(clean_speech[:600])
-
-            if audio_path and os.path.exists(audio_path):
-                with open(audio_path, "rb") as af:
-                    await update.message.reply_voice(voice=af, caption=resp_text[:1024])
-            else:
-                await update.message.reply_text(resp_text)
-
-            if file_path and os.path.exists(file_path):
-                with open(file_path, "rb") as f:
-                    await update.message.reply_photo(photo=f)
-
+            tts_path = await synthesize_speech(response[:400])
+            if tts_path.exists():
+                with open(tts_path, "rb") as f_voice:
+                    await update.message.reply_voice(voice=f_voice)
         except Exception as e:
-            logger.error(f"Erro ao processar voz no Telegram: {e}")
-            await update.message.reply_text(f"🦜 Erro ao processar áudio: {e}")
+            logger.warning(f"Falha ao enviar resposta em voz: {e}")
 
-    async def _start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        welcome = (
-            f"🦜 Olá, {user.first_name}! Eu sou o **Periquito**, seu assistente de IA pessoal nativo.\n\n"
-            f"Estou conectado ao seu computador e pronto para receber seus comandos de texto ou mensagens de voz!\n\n"
-            f"💡 **Dicas de uso:**\n"
-            f"• Mande mensagens de texto ou **áudio de voz** pelo celular.\n"
-            f"• Peça *'status do pc'*, *'tira um print da tela'*, ou tire qualquer dúvida.\n"
-            f"• Só o Play tem permissão para comandar o computador diretamente!"
-        )
-        await update.message.reply_text(welcome)
-
-    def run(self):
-        """Inicia o bot do Telegram com requisições resilientes."""
-        if not self.token or self.token == "seu_token_do_telegram_aqui":
-            print("Aviso: Token do Telegram não configurado no arquivo config/.env", flush=True)
+    async def _handle_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or not _is_admin(update.effective_user.id):
             return
 
-        print("==================================================", flush=True)
-        print("🦜 INICIANDO BOT DO TELEGRAM DO PERIQUITO...", flush=True)
-        print("==================================================", flush=True)
+        INBOX_DIR.mkdir(parents=True, exist_ok=True)
+        doc = update.message.document
+        photo = update.message.photo
 
-        async def post_init(application):
-            bot_info = await application.bot.get_me()
-            print("==================================================", flush=True)
-            print(f"🦜 PERIQUITO TELEGRAM BOT ONLINE E OPERACIONAL!", flush=True)
-            print(f"Nome: {bot_info.first_name} | Username: @{bot_info.username} (ID: {bot_info.id})", flush=True)
-            print("==================================================", flush=True)
+        if doc:
+            f = await context.bot.get_file(doc.file_id)
+            dest = INBOX_DIR / doc.file_name
+            await f.download_to_drive(str(dest))
+            caption = update.message.caption or f"Recebi o arquivo {doc.file_name}"
+            prompt = f"{caption}. O arquivo foi salvo em: {dest}"
+        elif photo:
+            f = await context.bot.get_file(photo[-1].file_id)
+            dest = INBOX_DIR / f"foto_{update.message.message_id}.jpg"
+            await f.download_to_drive(str(dest))
+            caption = update.message.caption or "Recebi esta foto"
+            prompt = f"{caption}. A imagem foi salva em: {dest}"
+        else:
+            return
 
-        # Configura cliente HTTPX com timeouts adequados
-        req = HTTPXRequest(
-            connection_pool_size=8,
-            connect_timeout=30.0,
-            read_timeout=30.0,
-            write_timeout=30.0,
-            pool_timeout=30.0
-        )
+        await update.message.reply_text(f"📥 Arquivo salvo no inbox do PC: `{dest.name}`", parse_mode="Markdown")
+        res = await self.brain.ask(prompt, user_name="Lucas", channel="telegram")
+        for chunk in slice_message(res, max_length=4000):
+            await update.message.reply_text(chunk)
 
-        app = ApplicationBuilder().token(self.token).request(req).post_init(post_init).build()
-        app.add_handler(CommandHandler("start", self._start_command))
-        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self._handle_message))
-        app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
-        app.run_polling(drop_pending_updates=True, bootstrap_retries=5)
+    async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Gerencia cliques nos botões de aprovação/recusa HITL."""
+        query = update.callback_query
+        if not query or not query.from_user or not _is_admin(query.from_user.id):
+            await query.answer("Não autorizado.", show_alert=True)
+            return
+
+        data = query.data
+        if data.startswith("approve_"):
+            req_id = int(data.split("_")[1])
+            resolve_hitl(req_id, approved=True)
+            await query.answer("Ação APROVADA com sucesso!")
+            await query.edit_message_text(f"{query.message.text}\n\n✅ **STATUS: APROVADO PELO LUCAS**", parse_mode="Markdown")
+        elif data.startswith("reject_"):
+            req_id = int(data.split("_")[1])
+            resolve_hitl(req_id, approved=False)
+            await query.answer("Ação RECUSADA.")
+            await query.edit_message_text(f"{query.message.text}\n\n❌ **STATUS: RECUSADO PELO LUCAS**", parse_mode="Markdown")
+
+    async def _ipc_worker_loop(self):
+        """Worker contínuo vigiando SQLite WAL para HITL, Outbox e Notificações."""
+        sent_hitl_ids = set()
+
+        while True:
+            try:
+                # 1. Verifica solicitações de HITL
+                pending_hitl = get_pending_hitl()
+                for req in pending_hitl:
+                    r_id = req["id"]
+                    if r_id not in sent_hitl_ids:
+                        sent_hitl_ids.add(r_id)
+                        kb = [
+                            [
+                                InlineKeyboardButton("✅ Aprovar", callback_data=f"approve_{r_id}"),
+                                InlineKeyboardButton("❌ Recusar", callback_data=f"reject_{r_id}")
+                            ]
+                        ]
+                        text = (
+                            f"⚠️ **[CONFIRMAÇÃO DE SEGURANÇA HITL]**\n\n"
+                            f"**Ação:** `{req['action_type']}`\n"
+                            f"**Detalhes:**\n{req['description']}\n\n"
+                            f"⏳ _Aguardando sua decisão por até 60 segundos..._"
+                        )
+                        await self.app.bot.send_message(
+                            chat_id=config.telegram.admin_id,
+                            text=text,
+                            parse_mode="Markdown",
+                            reply_markup=InlineKeyboardMarkup(kb)
+                        )
+
+                # 2. Verifica arquivos na fila de outbox (PC -> Celular)
+                pending_files = get_pending_outbox_files()
+                for pf in pending_files:
+                    f_id = pf["id"]
+                    f_path = Path(pf["file_path"])
+                    if f_path.exists():
+                        try:
+                            with open(f_path, "rb") as send_doc:
+                                await self.app.bot.send_document(
+                                    chat_id=config.telegram.admin_id,
+                                    document=send_doc,
+                                    caption=pf.get("caption") or f"📄 {f_path.name}"
+                                )
+                            mark_outbox_file_sent(f_id, success=True)
+                        except Exception as e:
+                            logger.error(f"Erro ao entregar arquivo {f_path}: {e}")
+                            mark_outbox_file_sent(f_id, success=False)
+                    else:
+                        mark_outbox_file_sent(f_id, success=False)
+
+                # 3. Verifica notificações do sistema (ex: Alexa finalizada)
+                pending_notifs = get_pending_notifications()
+                for notif in pending_notifs:
+                    n_id = notif["id"]
+                    n_text = f"🔔 **{notif['title']}**\n{notif['message']}"
+                    await self.app.bot.send_message(
+                        chat_id=config.telegram.admin_id,
+                        text=n_text,
+                        parse_mode="Markdown"
+                    )
+                    mark_notification_delivered(n_id)
+
+            except Exception as e:
+                logger.error(f"Erro no IPC Worker Loop: {e}")
+
+            await asyncio.sleep(1.0)
