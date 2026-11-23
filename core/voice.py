@@ -142,5 +142,5 @@ class VoiceEngine:
             import subprocess
             subprocess.Popen(
                 ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", audio_path],
-                shell=True
+                shell=False
             )

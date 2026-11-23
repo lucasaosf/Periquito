@@ -138,8 +138,12 @@ class SystemTools:
 
         gpu_info = "NVIDIA GeForce GTX 1070 (8 GB VRAM)"
         try:
-            out = subprocess.check_output("wmic path win32_VideoController get name", shell=True).decode()
-            names = [l.strip() for l in out.splitlines() if l.strip() and "Name" not in l]
+            out = subprocess.check_output(
+                ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+                text=True,
+                timeout=5
+            )
+            names = [l.strip() for l in out.splitlines() if l.strip()]
             if names:
                 gpu_info = ", ".join(names)
         except Exception:
@@ -157,12 +161,15 @@ class SystemTools:
 
     @staticmethod
     def open_application(app_name: str) -> str:
-        """Abre um aplicativo configurado."""
+        """Abre um aplicativo configurado de forma segura."""
         name_clean = app_name.lower().strip()
         for key, path in APPS_MAP.items():
             if key in name_clean:
                 try:
-                    subprocess.Popen(path, shell=True)
+                    if os.path.exists(path):
+                        os.startfile(path)
+                    else:
+                        subprocess.Popen([path], shell=False)
                     return f"Aplicativo '{key.upper()}' iniciado com sucesso!"
                 except Exception as e:
                     return f"Erro ao iniciar '{key}': {e}"

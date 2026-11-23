@@ -187,18 +187,20 @@ async def process_chat(request: Request):
 
 @app.get("/api/audio/{filename}")
 async def get_audio_file(filename: str):
-    """Serve os arquivos de voz MP3 gerados para o reprodutor e analisador 3D."""
-    audio_path = os.path.join(brain.voice.temp_dir, filename)
-    if os.path.exists(audio_path):
+    """Serve os arquivos de voz MP3 gerados para o reprodutor e analisador 3D (protegido contra path traversal)."""
+    safe_name = os.path.basename(filename)
+    audio_path = os.path.join(brain.voice.temp_dir, safe_name)
+    if os.path.exists(audio_path) and os.path.isfile(audio_path):
         return FileResponse(audio_path, media_type="audio/mpeg")
     return JSONResponse({"error": "Arquivo não encontrado"}, status_code=404)
 
 
 @app.get("/api/files/{filename}")
 async def get_generated_file(filename: str):
-    """Serve arquivos e screenshots gerados pelo Periquito."""
-    file_path = os.path.join(brain.voice.temp_dir, filename)
-    if os.path.exists(file_path):
+    """Serve arquivos e screenshots gerados pelo Periquito (protegido contra path traversal)."""
+    safe_name = os.path.basename(filename)
+    file_path = os.path.join(brain.voice.temp_dir, safe_name)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
         return FileResponse(file_path)
     return JSONResponse({"error": "Arquivo não encontrado"}, status_code=404)
 
