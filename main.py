@@ -22,6 +22,7 @@ from core.brain_bridge import PeriquitoBrain
 from channels.telegram_bot import TelegramChannel
 from channels.discord_bot import DiscordChannel
 from channels.alexa_webhook import alexa_app, set_alexa_brain
+from channels.web_cockpit import run_cockpit_server_async, set_cockpit_brain
 from channels.local_mic import LocalMicChannel
 
 # Configuração de Logs
@@ -68,6 +69,7 @@ async def main():
 
     brain = PeriquitoBrain()
     set_alexa_brain(brain)
+    set_cockpit_brain(brain)
 
     telegram_channel = TelegramChannel(brain)
     discord_channel = DiscordChannel(brain)
@@ -80,7 +82,8 @@ async def main():
         await asyncio.gather(
             telegram_channel.start(),
             discord_channel.start(),
-            run_alexa_server()
+            run_alexa_server(),
+            run_cockpit_server_async(port=7860)
         )
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("🛑 Encerrando Periquito AI com segurança...")
